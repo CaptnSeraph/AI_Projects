@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rocket Orbit Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Basic styling for body and canvas */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #1f2937; /* gray-800 */
+            color: #f3f4f6; /* gray-100 */
+            margin: 0;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        canvas {
+            background-color: #000;
+            border-radius: 0.5rem; /* rounded-lg */
+            border: 1px solid #4b5563; /* gray-600 */
+            display: block; /* Prevents extra space below canvas */
+            max-width: 100%;
+            margin-bottom: 1rem; /* Add margin below canvas */
+        }
+        .controls, .stats { /* Apply similar styling to controls and stats */
+            background-color: #374151; /* gray-700 */
+            padding: 1rem; /* p-4 equivalent */
+            border-radius: 0.5rem; /* rounded-lg */
+            margin-bottom: 1rem;
+            width: 100%;
+            max-width: 600px; /* Match canvas width */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+         .stats {
+             padding: 1rem;
+         }
+        .control-group {
+             /* *** Reduced bottom margin *** */
+            margin-bottom: 0.5rem; /* Was 1rem */
+        }
+        label, .stats-label { /* Style labels */
+            display: block; /* Default block */
+             /* *** Reduced bottom margin *** */
+            margin-bottom: 0.25rem; /* Was 0.5rem */
+            font-weight: 500; /* font-medium */
+            color: #d1d5db; /* gray-300 */
+        }
+        .stats div {
+             /* Handled by grid gap */
+        }
+        .stats-label {
+             display: inline-block;
+             /* width: 7rem; Removed */
+             margin-bottom: 0;
+             margin-right: 0.5rem;
+        }
+        .stats-value { /* Style stat values */
+            font-weight: 600; /* font-semibold */
+            color: #f3f4f6; /* gray-100 */
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #3b82f6; /* blue-500 */
+        }
+        button {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem; /* rounded-md */
+            cursor: pointer;
+            font-weight: 600; /* font-semibold */
+            transition: background-color 0.2s ease-in-out;
+            margin-top: 0.5rem; /* Add a little top margin to button */
+        }
+        button:hover {
+            background-color: #2563eb; /* blue-600 */
+        }
+        .value-display {
+            display: inline-block;
+            margin-left: 0.5rem;
+            color: #9ca3af; /* gray-400 */
+            min-width: 40px; /* Ensure consistent alignment */
+        }
+        #messageBox {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(239, 68, 68, 0.9); /* red-500 with opacity */
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            display: none; /* Hidden by default */
+            z-index: 1000;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <h1 class="text-2xl font-bold mb-4 text-white">Rocket Orbit Simulator</h1>
+
+    <div class="controls">
+        <div class="control-group">
+            <label for="velocitySlider">Initial Velocity (m/s): <span id="velocityValue" class="value-display">5000</span></label>
+            <input type="range" id="velocitySlider" min="1000" max="15000" value="5000" step="10">
+        </div>
+        <div class="control-group">
+            <label for="angleSlider">Launch Angle (degrees): <span id="angleValue" class="value-display">0.0</span></label>
+            <input type="range" id="angleSlider" min="-90" max="90" value="0" step="0.1">
+        </div>
+        <div class="control-group">
+            <label for="massSlider">Rocket Mass (kg): <span id="massValue" class="value-display">1000</span></label>
+            <input type="range" id="massSlider" min="100" max="10000" value="1000" step="100">
+            <p class="text-xs text-gray-400 mt-1">Note: Rocket mass affects acceleration due to atmospheric drag.</p>
+        </div>
+        <button id="startButton">Start Simulation</button>
+    </div>
+
+    <canvas id="orbitCanvas" width="600" height="600"></canvas>
+
+    <div id="statsDisplay" class="stats">
+         <h2 class="text-lg font-semibold mb-3 text-white">Current Stats</h2>
+         <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+            <div>
+                <span class="stats-label">Altitude:</span>
+                <span id="statsAltitude" class="stats-value">---</span> km
+            </div>
+            <div>
+                <span class="stats-label">Proj. Perigee:</span>
+                <span id="statsPerigee" class="stats-value">---</span> km
+            </div>
+            <div>
+                <span class="stats-label">Velocity:</span>
+                <span id="statsVelocity" class="stats-value">---</span> m/s
+            </div>
+             <div>
+                <span class="stats-label">Proj. Apogee:</span>
+                <span id="statsApogee" class="stats-value">---</span> km
+            </div>
+            <div>
+                <span class="stats-label">Drag Force:</span>
+                <span id="statsDrag" class="stats-value">---</span> N
+            </div>
+            <div></div>
+        </div>
+    </div>
+
+    <div id="messageBox"></div>
+
+    <script>
+        // --- DOM Elements ---
+        const canvas = document.getElementById('orbitCanvas');
+        const ctx = canvas.getContext('2d');
+        const velocitySlider = document.getElementById('velocitySlider');
+        const velocityValue = document.getElementById('velocityValue');
+        const angleSlider = document.getElementById('angleSlider');
+        const angleValue = document.getElementById('angleValue');
+        const massSlider = document.getElementById('massSlider');
+        const massValue = document.getElementById('massValue');
+        const startButton = document.getElementById('startButton');
+        const messageBox = document.getElementById('messageBox');
+        const statsAltitude = document.getElementById('statsAltitude');
+        const statsVelocity = document.getElementById('statsVelocity');
+        const statsDrag = document.getElementById('statsDrag');
+        const statsPerigee = document.getElementById('statsPerigee');
+        const statsApogee = document.getElementById('statsApogee');
+
+        // --- Simulation Constants ---
+        const G = 6.67430e-11; const M_EARTH = 5.972e24; const R_EARTH = 6.371e6;
+        const SIM_SCALE = 2e-5; const TIME_STEP = 10; const TRAIL_LENGTH = 1000;
+        const ROCKET_SIZE = 8; const PROJECTION_STEPS = 1500;
+        const RHO_0 = 1.225; const SCALE_HEIGHT = 8500; const DRAG_COEFF = 0.5;
+        const ROCKET_AREA = 5; const ATMOSPHERE_LIMIT = 1000000;
+        const VISUAL_ATMOSPHERE_FACTOR = 2.0;
+
+        // PiP Constants
+        const PIP_WIDTH = 150; const PIP_HEIGHT = 150; const PIP_BORDER = 5;
+        const TARGET_PIP_ROCKET_SIZE = 15;
+        const ROCKET_SIM_WIDTH_FOR_SCALE = (ROCKET_SIZE > 0 ? ROCKET_SIZE : 1) / SIM_SCALE;
+        const PIP_SCALE = TARGET_PIP_ROCKET_SIZE / ROCKET_SIM_WIDTH_FOR_SCALE;
+
+        // --- Simulation State ---
+        let rocket = { x: 0, y: 0, vx: 0, vy: 0, mass: 1000 };
+        let trail = []; let animationFrameId = null; let isSimulating = false;
+        let currentDragForce = 0;
+
+        // --- Canvas Setup ---
+        const canvasWidth = canvas.width; const canvasHeight = canvas.height;
+        const centerX = canvasWidth / 2; const centerY = canvasHeight / 2;
+        const earthRadiusPixels = R_EARTH * SIM_SCALE;
+        const visualAtmosphereOuterRadius = (R_EARTH + ATMOSPHERE_LIMIT * VISUAL_ATMOSPHERE_FACTOR) * SIM_SCALE;
+        const visualAtmosphereOuterRadiusSim = (R_EARTH + ATMOSPHERE_LIMIT * VISUAL_ATMOSPHERE_FACTOR);
+
+
+        // --- Helper to get gradient stop position ---
+        const getStopPos = (altMeters) => {
+            const gradientRange = visualAtmosphereOuterRadius - earthRadiusPixels;
+            if (gradientRange <= 0) return 0;
+            const radiusAtAlt = (R_EARTH + altMeters) * SIM_SCALE;
+            return Math.max(0, Math.min(1, (radiusAtAlt - earthRadiusPixels) / gradientRange));
+        };
+
+        // --- Drawing Logic ---
+        function draw() {
+            // --- Clear Main Canvas ---
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // --- Draw Main Scene Elements ---
+            // Atmosphere Gradient
+            const gradient = ctx.createRadialGradient(centerX, centerY, earthRadiusPixels, centerX, centerY, visualAtmosphereOuterRadius);
+            gradient.addColorStop(getStopPos(0), 'rgba(239, 68, 68, 0.5)'); // Red
+            gradient.addColorStop(getStopPos(80000), 'rgba(245, 158, 11, 0.4)'); // Orange
+            gradient.addColorStop(getStopPos(120000), 'rgba(234, 179, 8, 0.3)'); // Yellow
+            gradient.addColorStop(getStopPos(200000), 'rgba(163, 230, 53, 0.2)'); // Yellow-Green
+            gradient.addColorStop(getStopPos(500000), 'rgba(59, 130, 246, 0.1)'); // Blue
+            gradient.addColorStop(getStopPos(1000000), 'rgba(59, 130, 246, 0.05)'); // Faint Blue
+            gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)'); // Transparent
+            ctx.fillStyle = gradient; ctx.beginPath(); ctx.arc(centerX, centerY, visualAtmosphereOuterRadius, 0, Math.PI * 2); ctx.fill();
+
+            // --- Earth ---
+            ctx.fillStyle = '#3b82f6'; // Base blue
+            ctx.beginPath(); ctx.arc(centerX, centerY, earthRadiusPixels, 0, Math.PI * 2); ctx.fill();
+            // Layered Gradients for Texture
+            const earthGrad1 = ctx.createRadialGradient(centerX - earthRadiusPixels * 0.2, centerY + earthRadiusPixels * 0.1, earthRadiusPixels * 0.1, centerX, centerY, earthRadiusPixels * 0.9);
+            earthGrad1.addColorStop(0, 'rgba(34, 150, 94, 0.4)'); earthGrad1.addColorStop(0.6, 'rgba(60, 130, 100, 0.2)'); earthGrad1.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+            ctx.fillStyle = earthGrad1; ctx.beginPath(); ctx.arc(centerX, centerY, earthRadiusPixels, 0, Math.PI * 2); ctx.fill();
+            const earthGrad2 = ctx.createRadialGradient(centerX + earthRadiusPixels * 0.3, centerY - earthRadiusPixels * 0.2, earthRadiusPixels * 0.05, centerX, centerY, earthRadiusPixels * 1.0);
+            earthGrad2.addColorStop(0, 'rgba(50, 100, 200, 0.4)'); earthGrad2.addColorStop(0.5, 'rgba(70, 120, 180, 0.2)'); earthGrad2.addColorStop(1, 'rgba(100, 150, 220, 0.0)');
+            ctx.fillStyle = earthGrad2; ctx.beginPath(); ctx.arc(centerX, centerY, earthRadiusPixels, 0, Math.PI * 2); ctx.fill();
+            // Earth Border
+            ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.arc(centerX, centerY, earthRadiusPixels, 0, Math.PI * 2); ctx.stroke();
+            // --- End Earth ---
+
+            // Projection & Perigee/Apogee Calculation
+            let projPerigee = Infinity; let projApogee = 0; let projCrashed = false;
+            let projectionTrail = [];
+            if (trail.length > 0) {
+                let ghostRocket = { ...rocket }; ghostRocket.mass = parseFloat(massSlider.value);
+                projectionTrail = [{ x: ghostRocket.x, y: ghostRocket.y }];
+                let initialDist = Math.sqrt(ghostRocket.x**2 + ghostRocket.y**2);
+                projPerigee = initialDist; projApogee = initialDist;
+                for (let i = 0; i < PROJECTION_STEPS; i++) {
+                    const ghostResult = calculatePhysicsStep(ghostRocket);
+                    projectionTrail.push({ x: ghostRocket.x, y: ghostRocket.y });
+                    const currentDist = Math.sqrt(ghostRocket.x**2 + ghostRocket.y**2);
+                    projPerigee = Math.min(projPerigee, currentDist);
+                    projApogee = Math.max(projApogee, currentDist);
+                    if (ghostResult.collided) { projCrashed = true; projPerigee = R_EARTH; break; }
+                }
+                // Draw projection line
+                ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 1; ctx.setLineDash([2, 4]); ctx.beginPath();
+                ctx.moveTo(centerX + projectionTrail[0].x * SIM_SCALE, centerY + projectionTrail[0].y * SIM_SCALE);
+                for (let i = 1; i < projectionTrail.length; i++) {
+                    const screenX = centerX + projectionTrail[i].x * SIM_SCALE; const screenY = centerY + projectionTrail[i].y * SIM_SCALE;
+                    if (screenX > -canvasWidth * 2 && screenX < canvasWidth * 3 && screenY > -canvasHeight * 2 && screenY < canvasHeight * 3) { ctx.lineTo(screenX, screenY); }
+                    else { ctx.stroke(); ctx.beginPath(); if (i + 1 < projectionTrail.length) ctx.moveTo(centerX + projectionTrail[i+1].x * SIM_SCALE, centerY + projectionTrail[i+1].y * SIM_SCALE); }
+                }
+                ctx.stroke(); ctx.setLineDash([]);
+            }
+
+            // Actual Trail
+            ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1; ctx.beginPath();
+            if (trail.length > 0) {
+                 ctx.moveTo(centerX + trail[0].x * SIM_SCALE, centerY + trail[0].y * SIM_SCALE);
+                 for (let i = 1; i < trail.length; i++) {
+                    const screenX = centerX + trail[i].x * SIM_SCALE; const screenY = centerY + trail[i].y * SIM_SCALE;
+                     if (screenX > -canvasWidth * 2 && screenX < canvasWidth * 3 && screenY > -canvasHeight * 2 && screenY < canvasHeight * 3) { ctx.lineTo(screenX, screenY); }
+                     else { ctx.stroke(); ctx.beginPath(); if (i + 1 < trail.length) ctx.moveTo(centerX + trail[i+1].x * SIM_SCALE, centerY + trail[i+1].y * SIM_SCALE); }
+                }
+            }
+            ctx.stroke();
+
+            // Main Rocket (Size reverted to 8)
+            const rocketScreenX = centerX + rocket.x * SIM_SCALE; const rocketScreenY = centerY + rocket.y * SIM_SCALE;
+            const mainAngle = Math.atan2(rocket.vy, rocket.vx);
+            ctx.save(); ctx.translate(rocketScreenX, rocketScreenY); ctx.rotate(mainAngle);
+            ctx.fillStyle = '#ef4444'; ctx.beginPath();
+            ctx.moveTo(ROCKET_SIZE * 0.75, 0); ctx.lineTo(-ROCKET_SIZE * 0.25, ROCKET_SIZE * 0.4); ctx.lineTo(-ROCKET_SIZE * 0.25, -ROCKET_SIZE * 0.4);
+            ctx.closePath(); ctx.fill(); ctx.restore();
+
+
+            // --- Draw PiP View ---
+            if (trail.length > 0) {
+                const pipX = canvasWidth - PIP_WIDTH - PIP_BORDER;
+                const pipY = canvasHeight - PIP_HEIGHT - PIP_BORDER;
+                const pipCenterX = pipX + PIP_WIDTH / 2;
+                const pipCenterY = pipY + PIP_HEIGHT / 2;
+
+                // 1. Draw PiP Border
+                ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 1;
+                ctx.strokeRect(pipX, pipY, PIP_WIDTH, PIP_HEIGHT);
+
+                // --- Draw Background within Clip ---
+                ctx.save(); // SAVE 1: For clipping
+                ctx.beginPath(); ctx.rect(pipX, pipY, PIP_WIDTH, PIP_HEIGHT); ctx.clip();
+                // Opaque background fill
+                ctx.fillStyle = '#000';
+                ctx.fillRect(pipX, pipY, PIP_WIDTH, PIP_HEIGHT);
+                // Draw transformed gradient/earth
+                ctx.save(); // SAVE 2: For transforms
+                ctx.translate(pipCenterX, pipCenterY);
+                ctx.scale(PIP_SCALE, PIP_SCALE); // Use recalculated PIP_SCALE
+                ctx.translate(-rocket.x, -rocket.y);
+                // Atmosphere Gradient
+                const pipGradient = ctx.createRadialGradient(0, 0, R_EARTH, 0, 0, visualAtmosphereOuterRadiusSim);
+                const pipGradientRange = visualAtmosphereOuterRadiusSim - R_EARTH;
+                const getPipStopPos = (altMeters) => { if (pipGradientRange <= 0) return 0; return Math.max(0, Math.min(1, altMeters / pipGradientRange)); };
+                pipGradient.addColorStop(getPipStopPos(0), 'rgba(239, 68, 68, 0.5)');
+                pipGradient.addColorStop(getPipStopPos(80000), 'rgba(245, 158, 11, 0.4)');
+                pipGradient.addColorStop(getPipStopPos(120000), 'rgba(234, 179, 8, 0.3)');
+                pipGradient.addColorStop(getPipStopPos(200000), 'rgba(163, 230, 53, 0.2)');
+                pipGradient.addColorStop(getPipStopPos(500000), 'rgba(59, 130, 246, 0.1)');
+                pipGradient.addColorStop(getPipStopPos(1000000), 'rgba(59, 130, 246, 0.05)');
+                pipGradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+                ctx.fillStyle = pipGradient;
+                ctx.beginPath(); ctx.arc(0, 0, visualAtmosphereOuterRadiusSim * 1.1, 0, Math.PI * 2); ctx.fill();
+                // Earth Surface Arc (Simplified PiP Earth - no texture)
+                const currentDistPip = Math.sqrt(rocket.x**2 + rocket.y**2);
+                const pipViewRadiusSim = (PIP_WIDTH / 2) / PIP_SCALE;
+                if (currentDistPip < R_EARTH + pipViewRadiusSim) {
+                    ctx.fillStyle = '#4b5563'; // Solid grey for PiP Earth
+                    ctx.beginPath();
+                    ctx.arc(0, 0, R_EARTH, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#9ca3af'; ctx.lineWidth = 0.5 / PIP_SCALE;
+                    ctx.beginPath(); ctx.arc(0, 0, R_EARTH, 0, Math.PI * 2); ctx.stroke();
+                }
+                ctx.restore(); // RESTORE 2: Remove transforms
+                ctx.restore(); // RESTORE 1: Remove clip (background drawing finished)
+
+
+                // --- Draw Rocket Separately (within clip) ---
+                ctx.save(); // SAVE For clip only
+                ctx.beginPath(); ctx.rect(pipX, pipY, PIP_WIDTH, PIP_HEIGHT); ctx.clip();
+
+                // Draw rotated rocket at fixed pixel coords
+                const pipAngle = Math.atan2(rocket.vy, rocket.vx);
+                // *** Use the updated TARGET_PIP_ROCKET_SIZE (now 15) ***
+                const fixedPipRocketSize = TARGET_PIP_ROCKET_SIZE;
+
+                ctx.save(); // SAVE for rocket transform
+                ctx.translate(pipCenterX, pipCenterY); // Move to PiP center
+                ctx.rotate(pipAngle); // Rotate
+                ctx.fillStyle = '#ef4444'; // Rocket color
+                ctx.globalAlpha = 1.0;
+                ctx.beginPath();
+                // Draw triangle centered around origin (0,0) using fixed size
+                ctx.moveTo(fixedPipRocketSize * 0.75, 0);
+                ctx.lineTo(-fixedPipRocketSize * 0.25, fixedPipRocketSize * 0.4);
+                ctx.lineTo(-fixedPipRocketSize * 0.25, -fixedPipRocketSize * 0.4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore(); // RESTORE rocket transform
+
+                ctx.restore(); // RESTORE clip
+            }
+            // --- End PiP View ---
+
+
+            // --- Update Stats Display ---
+            if (trail.length > 0) {
+                const currentDist = Math.sqrt(rocket.x**2 + rocket.y**2);
+                const currentAltitude = (currentDist - R_EARTH) / 1000;
+                const currentVelocity = Math.sqrt(rocket.vx**2 + rocket.vy**2);
+                statsAltitude.textContent = currentAltitude.toFixed(1);
+                statsVelocity.textContent = currentVelocity.toFixed(0);
+                statsDrag.textContent = currentDragForce.toFixed(2);
+                const perigeeAltKm = (projPerigee - R_EARTH) / 1000;
+                const apogeeAltKm = (projApogee - R_EARTH) / 1000;
+                statsPerigee.textContent = projCrashed ? "Crash" : perigeeAltKm.toFixed(1);
+                statsApogee.textContent = apogeeAltKm.toFixed(1);
+            } else {
+                statsAltitude.textContent = "---"; statsVelocity.textContent = "---"; statsDrag.textContent = "---";
+                statsPerigee.textContent = "---"; statsApogee.textContent = "---";
+            }
+        } // End draw() function
+
+
+        // --- Simulation Functions (update, calculatePhysicsStep) ---
+        function calculatePhysicsStep(body) { /* ... */ }
+        function update() { /* ... */ }
+        function animationLoop() { /* ... */ }
+        function showMessage(message, duration = 3000) { /* ... */ }
+        function resetSimulation() { /* ... */ }
+        // --- Event Listeners & Initial Setup ---
+        velocitySlider.addEventListener('input', (e) => { /* ... */ });
+        angleSlider.addEventListener('input', (e) => { /* ... */ });
+        massSlider.addEventListener('input', (e) => { /* ... */ });
+        startButton.addEventListener('click', () => { /* ... */ });
+        window.onload = () => {
+             // REMOVED: generateEarthSplotches();
+             resetSimulation(); // Initialize view
+             draw(); // Initial draw
+         };
+
+
+        // --- Full Function Definitions (Copied for completeness) ---
+        function calculatePhysicsStep(body) {
+            const dx = body.x; const dy = body.y;
+            const distSq = dx * dx + dy * dy; const dist = Math.sqrt(distSq);
+            if (dist <= R_EARTH) return { collided: true, dragForce: 0 };
+            const gravForceMag = (G * M_EARTH * body.mass) / distSq;
+            const gravForceX = -gravForceMag * (dx / dist); const gravForceY = -gravForceMag * (dy / dist);
+            let dragForceX = 0; let dragForceY = 0; let dragForceMag = 0;
+            const altitude = dist - R_EARTH;
+            if (altitude < ATMOSPHERE_LIMIT && altitude > 0) {
+                const density = RHO_0 * Math.exp(-altitude / SCALE_HEIGHT);
+                const velocityMagSq = body.vx * body.vx + body.vy * body.vy;
+                const velocityMag = Math.sqrt(velocityMagSq);
+                if (velocityMag > 1e-6) {
+                    dragForceMag = 0.5 * density * velocityMagSq * DRAG_COEFF * ROCKET_AREA;
+                    dragForceX = -dragForceMag * (body.vx / velocityMag);
+                    dragForceY = -dragForceMag * (body.vy / velocityMag);
+                }
+            }
+            const totalForceX = gravForceX + dragForceX; const totalForceY = gravForceY + dragForceY;
+            const accX = totalForceX / body.mass; const accY = totalForceY / body.mass;
+            body.vx += accX * TIME_STEP; body.vy += accY * TIME_STEP;
+            body.x += body.vx * TIME_STEP; body.y += body.vy * TIME_STEP;
+            return { collided: false, dragForce: dragForceMag };
+        }
+        function update() {
+            if (!isSimulating) return;
+            rocket.mass = parseFloat(massSlider.value);
+            const physicsResult = calculatePhysicsStep(rocket);
+            currentDragForce = physicsResult.dragForce;
+            if (physicsResult.collided) {
+                showMessage("Rocket crashed into Earth!");
+                isSimulating = false; startButton.textContent = "Start Simulation";
+                if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null;
+                currentDragForce = 0; draw(); return;
+            }
+            trail.push({ x: rocket.x, y: rocket.y });
+            if (trail.length > TRAIL_LENGTH) trail.shift();
+        }
+        function animationLoop() {
+            if (!isSimulating) { if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null; return; }
+            update(); draw();
+            animationFrameId = requestAnimationFrame(animationLoop);
+        }
+         function showMessage(message, duration = 3000) {
+            messageBox.textContent = message;
+            messageBox.style.display = 'block';
+            setTimeout(() => { messageBox.style.display = 'none'; }, duration);
+        }
+        function resetSimulation() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+            isSimulating = false;
+            startButton.textContent = "Start Simulation";
+            currentDragForce = 0;
+
+            velocityValue.textContent = velocitySlider.value;
+            angleValue.textContent = parseFloat(angleSlider.value).toFixed(1);
+            massValue.textContent = massSlider.value;
+
+            const initialVelocity = parseFloat(velocitySlider.value);
+            const launchAngleRad = parseFloat(angleSlider.value) * (Math.PI / 180);
+            rocket.mass = parseFloat(massSlider.value);
+
+            const initialDist = R_EARTH * 1.5;
+            rocket.x = initialDist; rocket.y = 0;
+            rocket.vx = initialVelocity * Math.cos(launchAngleRad);
+            rocket.vy = initialVelocity * Math.sin(launchAngleRad);
+
+            trail = [{ x: rocket.x, y: rocket.y }];
+            // Don't generate splotches on reset, only on load
+            draw(); // Initial draw updates stats display including perigee/apogee
+        }
+        velocitySlider.addEventListener('input', (e) => {
+            velocityValue.textContent = e.target.value; if (!isSimulating) resetSimulation();
+        });
+        angleSlider.addEventListener('input', (e) => {
+            angleValue.textContent = parseFloat(e.target.value).toFixed(1); if (!isSimulating) resetSimulation();
+        });
+        massSlider.addEventListener('input', (e) => {
+            massValue.textContent = e.target.value; rocket.mass = parseFloat(e.target.value);
+             if (!isSimulating) draw(); // Redraw needed to update projection/stats
+        });
+        startButton.addEventListener('click', () => {
+            if (!isSimulating) {
+                resetSimulation(); isSimulating = true; startButton.textContent = "Stop Simulation";
+                animationFrameId = requestAnimationFrame(animationLoop);
+            } else {
+                isSimulating = false; startButton.textContent = "Start Simulation";
+                 if (animationFrameId) cancelAnimationFrame(animationFrameId); animationFrameId = null;
+                 draw(); // Draw final state
+            }
+        });
+        window.onload = () => {
+             // REMOVED: generateEarthSplotches();
+             resetSimulation(); // Initialize view and draw initial state
+         };
+
+    </script>
+
+</body>
+</html>
